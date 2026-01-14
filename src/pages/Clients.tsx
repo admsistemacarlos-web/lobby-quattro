@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Users, Trash2, Edit2, Search, Plus, Home, MapPin, Bed, Car, Phone, Mail, Tag, Eye } from "lucide-react";
+import { Users, Trash2, Edit2, Search, Plus, Home, MapPin, Bed, Car, Phone, Mail, Tag, Eye, Filter, X } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -131,6 +131,14 @@ export default function Clients({ onNavigateToFilteredProperties }: ClientsProps
   const [selectedClientMatches, setSelectedClientMatches] = useState<Property[]>([]);
   const [selectedClientName, setSelectedClientName] = useState("");
 
+  // Estados dos filtros
+  const [showFilters, setShowFilters] = useState(false);
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterPropertyType, setFilterPropertyType] = useState<string>("all");
+  const [filterOrigin, setFilterOrigin] = useState<string>("all");
+  const [filterBudgetMin, setFilterBudgetMin] = useState<string>("");
+  const [filterBudgetMax, setFilterBudgetMax] = useState<string>("");
+
   // Buscar corretor_id do usuário logado
   useEffect(() => {
     async function getCorretorId() {
@@ -190,7 +198,6 @@ export default function Clients({ onNavigateToFilteredProperties }: ClientsProps
     return properties.filter((prop) => {
       let matches = true;
 
-      // Match por bairro
       if (client.pref_location && prop.neighborhood) {
         const clientLocation = client.pref_location.toLowerCase();
         const propLocation = prop.neighborhood.toLowerCase();
@@ -205,28 +212,24 @@ export default function Clients({ onNavigateToFilteredProperties }: ClientsProps
         }
       }
 
-      // Match por tipo de imóvel
       if (client.property_type && prop.property_type) {
         if (client.property_type !== prop.property_type) {
           matches = false;
         }
       }
 
-      // Match por quartos (imóvel deve ter >= que o mínimo do cliente)
       if (client.pref_min_bedrooms && prop.bedrooms) {
         if (prop.bedrooms < client.pref_min_bedrooms) {
           matches = false;
         }
       }
 
-      // Match por vagas (imóvel deve ter >= que o mínimo do cliente)
       if (client.pref_min_parking && prop.parking_spots) {
         if (prop.parking_spots < client.pref_min_parking) {
           matches = false;
         }
       }
 
-      // Match por preço (imóvel deve estar na faixa do cliente)
       if (prop.price) {
         if (client.budget_min && prop.price < client.budget_min) {
           matches = false;
@@ -257,15 +260,72 @@ export default function Clients({ onNavigateToFilteredProperties }: ClientsProps
     }
   }
 
-  // Filtrar clientes pela busca
+  // Limpar filtros
+  function clearFilters() {
+    setFilterStatus("all");
+    setFilterPropertyType("all");
+    setFilterOrigin("all");
+    setFilterBudgetMin("");
+    setFilterBudgetMax("");
+  }
+
+  // Contar filtros ativos
+  function countActiveFilters() {
+    let count = 0;
+    if (filterStatus !== "all") count++;
+    if (filterPropertyType !== "all") count++;
+    if (filterOrigin !== "all") count++;
+    if (filterBudgetMin) count++;
+    if (filterBudgetMax) count++;
+    return count;
+  }
+
+  // Filtrar clientes
   const filteredClients = clients.filter((client) => {
-    const term = searchTerm.toLowerCase();
-    return (
-      client.name.toLowerCase().includes(term) ||
-      client.phone?.toLowerCase().includes(term) ||
-      client.email?.toLowerCase().includes(term) ||
-      client.pref_location?.toLowerCase().includes(term)
-    );
+    // Filtro por busca de texto
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      const matchesSearch = (
+        client.name.toLowerCase().includes(term) ||
+        client.phone?.toLowerCase().includes(term) ||
+        client.email?.toLowerCase().includes(term) ||
+        client.pref_location?.toLowerCase().includes(term)
+      );
+      if (!matchesSearch) return false;
+    }
+
+    // Filtro por status
+    if (filterStatus !== "all" && client.status !== filterStatus) {
+      return false;
+    }
+
+    // Filtro por tipo de imóvel
+    if (filterPropertyType !== "all" && client.property_type !== filterPropertyType) {
+      return false;
+    }
+
+    // Filtro por origem
+    if (filterOrigin !== "all" && client.origin !== filterOrigin) {
+      return false;
+    }
+
+    // Filtro por orçamento mínimo
+    if (filterBudgetMin) {
+      const minValue = parseFloat(filterBudgetMin);
+      if (client.budget_max && client.budget_max < minValue) {
+        return false;
+      }
+    }
+
+    // Filtro por orçamento máximo
+    if (filterBudgetMax) {
+      const maxValue = parseFloat(filterBudgetMax);
+      if (client.budget_min && client.budget_min > maxValue) {
+        return false;
+      }
+    }
+
+    return true;
   });
 
   // Abrir modal para novo cliente
@@ -392,17 +452,19 @@ export default function Clients({ onNavigateToFilteredProperties }: ClientsProps
     return originOptions.find((o) => o.value === origin)?.label || origin || "-";
   }
 
+  const activeFiltersCount = countActiveFilters();
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
           <Users className="w-6 h-6" />
-          Clientes ({clients.length})
+          Clientes ({filteredClients.length})
         </h1>
 
-        <div className="flex gap-3 w-full sm:w-auto">
-          <div className="relative flex-1 sm:w-72">
+        <div className="flex gap-2 w-full sm:w-auto">
+          <div className="relative flex-1 sm:w-64">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               placeholder="Buscar cliente..."
@@ -411,6 +473,19 @@ export default function Clients({ onNavigateToFilteredProperties }: ClientsProps
               className="pl-9"
             />
           </div>
+          <Button 
+            variant={showFilters ? "default" : "outline"} 
+            onClick={() => setShowFilters(!showFilters)}
+            className="relative"
+          >
+            <Filter className="w-4 h-4 mr-2" />
+            Filtros
+            {activeFiltersCount > 0 && (
+              <span className="absolute -top-2 -right-2 bg-primary text-primary-foreground text-xs w-5 h-5 rounded-full flex items-center justify-center">
+                {activeFiltersCount}
+              </span>
+            )}
+          </Button>
           <Button onClick={openNewClientModal}>
             <Plus className="w-4 h-4 mr-2" />
             Novo
@@ -418,12 +493,108 @@ export default function Clients({ onNavigateToFilteredProperties }: ClientsProps
         </div>
       </div>
 
+      {/* Painel de Filtros */}
+{showFilters && (
+  <Card className="border-dashed">
+    <CardContent className="p-4">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-medium flex items-center gap-2">
+          <Filter className="w-4 h-4" />
+          Filtros Avançados
+        </h3>
+        {activeFiltersCount > 0 && (
+          <Button variant="ghost" size="sm" onClick={clearFilters}>
+            <X className="w-4 h-4 mr-1" />
+            Limpar filtros
+          </Button>
+        )}
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground">Status</label>
+          <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <SelectTrigger>
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
+              {statusOptions.map((s) => (
+                <SelectItem key={s.value} value={s.value}>
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${s.color}`}></span>
+                    {s.label}
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground">Tipo de Imóvel</label>
+          <Select value={filterPropertyType} onValueChange={setFilterPropertyType}>
+            <SelectTrigger>
+              <SelectValue placeholder="Tipo de imóvel" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
+              {propertyTypes.map((type) => (
+                <SelectItem key={type.value} value={type.value}>
+                  {type.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground">Origem</label>
+          <Select value={filterOrigin} onValueChange={setFilterOrigin}>
+            <SelectTrigger>
+              <SelectValue placeholder="Origem" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas</SelectItem>
+              {originOptions.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground">Orçamento Mín</label>
+          <Input
+            type="number"
+            placeholder="R$ 0"
+            value={filterBudgetMin}
+            onChange={(e) => setFilterBudgetMin(e.target.value)}
+          />
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground">Orçamento Máx</label>
+          <Input
+            type="number"
+            placeholder="R$ 999.999"
+            value={filterBudgetMax}
+            onChange={(e) => setFilterBudgetMax(e.target.value)}
+          />
+        </div>
+      </div>
+    </CardContent>
+  </Card>
+)}
       {/* Lista de Clientes */}
       <div className="space-y-4">
         {filteredClients.length === 0 ? (
           <Card>
             <CardContent className="py-8 text-center text-muted-foreground">
-              {searchTerm ? "Nenhum cliente encontrado." : "Nenhum cliente cadastrado. Clique em 'Novo' para adicionar."}
+              {searchTerm || activeFiltersCount > 0 
+                ? "Nenhum cliente encontrado com os filtros aplicados." 
+                : "Nenhum cliente cadastrado. Clique em 'Novo' para adicionar."}
             </CardContent>
           </Card>
         ) : (
@@ -740,7 +911,6 @@ export default function Clients({ onNavigateToFilteredProperties }: ClientsProps
               </p>
             ) : (
               <>
-                {/* Botão para ver todos na aba Imóveis */}
                 <Button 
                   onClick={handleViewFilteredProperties}
                   className="w-full"

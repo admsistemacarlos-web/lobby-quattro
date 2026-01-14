@@ -259,3 +259,20 @@
     transform: translateX(0);
   }
 }
+
+/* Remove spinners (setinhas) dos inputs number */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* Desabilita scroll em inputs number */
+input[type="number"] {
+  scrollbar-width: none;
+}

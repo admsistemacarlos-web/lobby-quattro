@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Home, Trash2, Edit2, Search, Plus, MapPin, Bed, Car, Bath, Ruler, Users, X, Phone, Mail } from "lucide-react";
+import { Home, Trash2, Edit2, Search, Plus, MapPin, Bed, Car, Bath, Ruler, Users, X, Phone, Mail, Filter } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -113,6 +113,21 @@ const booleanOptions = [
   { value: "false", label: "Não" },
 ];
 
+const bedroomOptions = [
+  { value: "1", label: "1+ quarto" },
+  { value: "2", label: "2+ quartos" },
+  { value: "3", label: "3+ quartos" },
+  { value: "4", label: "4+ quartos" },
+  { value: "5", label: "5+ quartos" },
+];
+
+const parkingOptions = [
+  { value: "1", label: "1+ vaga" },
+  { value: "2", label: "2+ vagas" },
+  { value: "3", label: "3+ vagas" },
+  { value: "4", label: "4+ vagas" },
+];
+
 interface PropertiesProps {
   filterByIds?: string[] | null;
   filterClientName?: string;
@@ -131,6 +146,17 @@ export default function Properties({ filterByIds, filterClientName, onClearFilte
   const [corretorId, setCorretorId] = useState<string | null>(null);
   const [selectedPropertyMatches, setSelectedPropertyMatches] = useState<Client[]>([]);
   const [selectedPropertyTitle, setSelectedPropertyTitle] = useState("");
+
+  // Estados dos filtros
+  const [showFilters, setShowFilters] = useState(false);
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterPropertyType, setFilterPropertyType] = useState<string>("all");
+  const [filterPurpose, setFilterPurpose] = useState<string>("all");
+  const [filterBedrooms, setFilterBedrooms] = useState<string>("all");
+  const [filterParking, setFilterParking] = useState<string>("all");
+  const [filterPriceMin, setFilterPriceMin] = useState<string>("");
+  const [filterPriceMax, setFilterPriceMax] = useState<string>("");
+  const [filterAreaMin, setFilterAreaMin] = useState<string>("");
 
   // Buscar corretor_id do usuário logado
   useEffect(() => {
@@ -190,7 +216,6 @@ export default function Properties({ filterByIds, filterClientName, onClearFilte
     return clients.filter((client) => {
       let matches = true;
 
-      // Match por bairro
       if (client.pref_location && property.neighborhood) {
         const clientLocation = client.pref_location.toLowerCase();
         const propLocation = property.neighborhood.toLowerCase();
@@ -199,28 +224,24 @@ export default function Properties({ filterByIds, filterClientName, onClearFilte
         }
       }
 
-      // Match por tipo de imóvel
       if (client.property_type && property.property_type) {
         if (client.property_type !== property.property_type) {
           matches = false;
         }
       }
 
-      // Match por quartos
       if (client.pref_min_bedrooms && property.bedrooms) {
         if (property.bedrooms < client.pref_min_bedrooms) {
           matches = false;
         }
       }
 
-      // Match por vagas
       if (client.pref_min_parking && property.parking_spots) {
         if (property.parking_spots < client.pref_min_parking) {
           matches = false;
         }
       }
 
-      // Match por preço
       if (property.price) {
         if (client.budget_min && property.price < client.budget_min) {
           matches = false;
@@ -242,24 +263,106 @@ export default function Properties({ filterByIds, filterClientName, onClearFilte
     setIsMatchModalOpen(true);
   }
 
-  // Filtrar imóveis pela busca E pelo filtro de IDs (se existir)
+  // Limpar filtros
+  function clearFilters() {
+    setFilterStatus("all");
+    setFilterPropertyType("all");
+    setFilterPurpose("all");
+    setFilterBedrooms("all");
+    setFilterParking("all");
+    setFilterPriceMin("");
+    setFilterPriceMax("");
+    setFilterAreaMin("");
+  }
+
+  // Contar filtros ativos
+  function countActiveFilters() {
+    let count = 0;
+    if (filterStatus !== "all") count++;
+    if (filterPropertyType !== "all") count++;
+    if (filterPurpose !== "all") count++;
+    if (filterBedrooms !== "all") count++;
+    if (filterParking !== "all") count++;
+    if (filterPriceMin) count++;
+    if (filterPriceMax) count++;
+    if (filterAreaMin) count++;
+    return count;
+  }
+
+  // Filtrar imóveis
   const filteredProperties = properties.filter((property) => {
-    // Primeiro, aplica filtro por IDs se existir
+    // Primeiro, aplica filtro por IDs se existir (vindo da tela de clientes)
     if (filterByIds && filterByIds.length > 0) {
       if (!filterByIds.includes(property.id)) {
         return false;
       }
     }
 
-    // Depois, aplica busca por texto
+    // Filtro por busca de texto
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
-      return (
+      const matchesSearch = (
         property.title.toLowerCase().includes(term) ||
         property.neighborhood?.toLowerCase().includes(term) ||
         property.city?.toLowerCase().includes(term) ||
         property.address?.toLowerCase().includes(term)
       );
+      if (!matchesSearch) return false;
+    }
+
+    // Filtro por status
+    if (filterStatus !== "all" && property.status !== filterStatus) {
+      return false;
+    }
+
+    // Filtro por tipo de imóvel
+    if (filterPropertyType !== "all" && property.property_type !== filterPropertyType) {
+      return false;
+    }
+
+    // Filtro por finalidade
+    if (filterPurpose !== "all" && property.purpose !== filterPurpose) {
+      return false;
+    }
+
+    // Filtro por quartos
+    if (filterBedrooms !== "all") {
+      const minBedrooms = parseInt(filterBedrooms);
+      if (!property.bedrooms || property.bedrooms < minBedrooms) {
+        return false;
+      }
+    }
+
+    // Filtro por vagas
+    if (filterParking !== "all") {
+      const minParking = parseInt(filterParking);
+      if (!property.parking_spots || property.parking_spots < minParking) {
+        return false;
+      }
+    }
+
+    // Filtro por preço mínimo
+    if (filterPriceMin) {
+      const minPrice = parseFloat(filterPriceMin);
+      if (!property.price || property.price < minPrice) {
+        return false;
+      }
+    }
+
+    // Filtro por preço máximo
+    if (filterPriceMax) {
+      const maxPrice = parseFloat(filterPriceMax);
+      if (!property.price || property.price > maxPrice) {
+        return false;
+      }
+    }
+
+    // Filtro por área mínima
+    if (filterAreaMin) {
+      const minArea = parseFloat(filterAreaMin);
+      if (!property.total_area || property.total_area < minArea) {
+        return false;
+      }
     }
 
     return true;
@@ -395,6 +498,8 @@ export default function Properties({ filterByIds, filterClientName, onClearFilte
     return purposes.find((p) => p.value === purpose)?.label || purpose || "-";
   }
 
+  const activeFiltersCount = countActiveFilters();
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -404,8 +509,8 @@ export default function Properties({ filterByIds, filterClientName, onClearFilte
           Imóveis ({filteredProperties.length})
         </h1>
 
-        <div className="flex gap-3 w-full sm:w-auto">
-          <div className="relative flex-1 sm:w-72">
+        <div className="flex gap-2 w-full sm:w-auto">
+          <div className="relative flex-1 sm:w-64">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               placeholder="Buscar imóvel..."
@@ -414,6 +519,19 @@ export default function Properties({ filterByIds, filterClientName, onClearFilte
               className="pl-9"
             />
           </div>
+          <Button 
+            variant={showFilters ? "default" : "outline"} 
+            onClick={() => setShowFilters(!showFilters)}
+            className="relative"
+          >
+            <Filter className="w-4 h-4 mr-2" />
+            Filtros
+            {activeFiltersCount > 0 && (
+              <span className="absolute -top-2 -right-2 bg-primary text-primary-foreground text-xs w-5 h-5 rounded-full flex items-center justify-center">
+                {activeFiltersCount}
+              </span>
+            )}
+          </Button>
           <Button onClick={openNewPropertyModal}>
             <Plus className="w-4 h-4 mr-2" />
             Novo
@@ -421,7 +539,7 @@ export default function Properties({ filterByIds, filterClientName, onClearFilte
         </div>
       </div>
 
-      {/* Banner de filtro ativo */}
+      {/* Banner de filtro por cliente (vindo da tela de clientes) */}
       {filterByIds && filterByIds.length > 0 && (
         <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
           <span className="text-sm text-green-700 dark:text-green-400">
@@ -438,13 +556,153 @@ export default function Properties({ filterByIds, filterClientName, onClearFilte
           </Button>
         </div>
       )}
+{/* Painel de Filtros */}
+{showFilters && (
+  <Card className="border-dashed">
+    <CardContent className="p-4">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-medium flex items-center gap-2">
+          <Filter className="w-4 h-4" />
+          Filtros Avançados
+        </h3>
+        {activeFiltersCount > 0 && (
+          <Button variant="ghost" size="sm" onClick={clearFilters}>
+            <X className="w-4 h-4 mr-1" />
+            Limpar filtros
+          </Button>
+        )}
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground">Status</label>
+          <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <SelectTrigger>
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
+              {statusOptions.map((s) => (
+                <SelectItem key={s.value} value={s.value}>
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${s.color}`}></span>
+                    {s.label}
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground">Tipo</label>
+          <Select value={filterPropertyType} onValueChange={setFilterPropertyType}>
+            <SelectTrigger>
+              <SelectValue placeholder="Tipo" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
+              {propertyTypes.map((type) => (
+                <SelectItem key={type.value} value={type.value}>
+                  {type.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground">Finalidade</label>
+          <Select value={filterPurpose} onValueChange={setFilterPurpose}>
+            <SelectTrigger>
+              <SelectValue placeholder="Finalidade" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas</SelectItem>
+              {purposes.map((p) => (
+                <SelectItem key={p.value} value={p.value}>
+                  {p.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground">Quartos</label>
+          <Select value={filterBedrooms} onValueChange={setFilterBedrooms}>
+            <SelectTrigger>
+              <SelectValue placeholder="Quartos" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Qualquer</SelectItem>
+              {bedroomOptions.map((b) => (
+                <SelectItem key={b.value} value={b.value}>
+                  {b.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground">Vagas</label>
+          <Select value={filterParking} onValueChange={setFilterParking}>
+            <SelectTrigger>
+              <SelectValue placeholder="Vagas" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Qualquer</SelectItem>
+              {parkingOptions.map((p) => (
+                <SelectItem key={p.value} value={p.value}>
+                  {p.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground">Preço Mín</label>
+          <Input
+            type="number"
+            placeholder="R$ 0"
+            value={filterPriceMin}
+            onChange={(e) => setFilterPriceMin(e.target.value)}
+          />
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground">Preço Máx</label>
+          <Input
+            type="number"
+            placeholder="R$ 999.999"
+            value={filterPriceMax}
+            onChange={(e) => setFilterPriceMax(e.target.value)}
+          />
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground">Área Mín (m²)</label>
+          <Input
+            type="number"
+            placeholder="0 m²"
+            value={filterAreaMin}
+            onChange={(e) => setFilterAreaMin(e.target.value)}
+          />
+        </div>
+      </div>
+    </CardContent>
+  </Card>
+)}
 
       {/* Lista de Imóveis */}
       <div className="space-y-4">
         {filteredProperties.length === 0 ? (
           <Card>
             <CardContent className="py-8 text-center text-muted-foreground">
-              {searchTerm || filterByIds ? "Nenhum imóvel encontrado." : "Nenhum imóvel cadastrado. Clique em 'Novo' para adicionar."}
+              {searchTerm || activeFiltersCount > 0 || filterByIds
+                ? "Nenhum imóvel encontrado com os filtros aplicados." 
+                : "Nenhum imóvel cadastrado. Clique em 'Novo' para adicionar."}
             </CardContent>
           </Card>
         ) : (
