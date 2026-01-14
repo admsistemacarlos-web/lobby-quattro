@@ -57,6 +57,13 @@ export const useLandingConfig = (corretorId: string | undefined) => {
     const fetchData = async () => {
       setIsLoading(true);
 
+      // Fetch corretor data (telefone, email, creci)
+      const { data: corretorData } = await supabase
+        .from("corretores")
+        .select("telefone, email, creci")
+        .eq("id", corretorId)
+        .maybeSingle();
+
       // Fetch landing config
       const { data: configData } = await supabase
         .from("landing_configs")
@@ -67,9 +74,34 @@ export const useLandingConfig = (corretorId: string | undefined) => {
       if (configData) {
         setConfig({
           ...configData,
+          // Se não tiver dados na landing_configs, usa os da tabela corretores
+          whatsapp: configData.whatsapp || corretorData?.telefone || null,
+          email_contato: configData.email_contato || corretorData?.email || null,
+          creci: configData.creci || corretorData?.creci || null,
           badges_customizados: configData.badges_customizados as string[] | null,
           config_extra: configData.config_extra as Record<string, unknown> | null,
           form_config: configData.form_config as unknown as FormConfig | null,
+        });
+      } else if (corretorData) {
+        // Se não existir landing_config ainda, cria um com os dados do corretor
+        setConfig({
+          id: "",
+          corretor_id: corretorId,
+          template_id: null,
+          whatsapp: corretorData.telefone || null,
+          email_contato: corretorData.email || null,
+          creci: corretorData.creci || null,
+          instagram_url: null,
+          facebook_url: null,
+          linkedin_url: null,
+          tiktok_url: null,
+          youtube_url: null,
+          headline_principal: null,
+          subtitulo: null,
+          imagem_fundo_url: null,
+          badges_customizados: null,
+          config_extra: null,
+          form_config: null,
         });
       }
 
