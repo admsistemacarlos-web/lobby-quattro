@@ -3,8 +3,23 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Users, Trash2, Edit2, Search, Plus, Home, MapPin, Bed, Car, Phone, Mail, Tag, Eye, Filter, X } from "lucide-react";
+import { 
+  Users, 
+  Trash2, 
+  Edit2, 
+  Search, 
+  Plus,
+  Phone,
+  Mail,
+  MapPin,
+  FileText,
+  Circle,
+  CheckCircle2,
+  XCircle,
+  AlertCircle
+} from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -42,20 +57,7 @@ interface Client {
   corretor_id: string | null;
 }
 
-interface Property {
-  id: string;
-  title: string;
-  property_type: string | null;
-  price: number | null;
-  bedrooms: number | null;
-  parking_spots: number | null;
-  neighborhood: string | null;
-  location: string | null;
-  city: string | null;
-  status: string | null;
-}
-
-// Valores padrão
+// Valores padrão para novo cliente
 const emptyClient = {
   name: "",
   phone: "",
@@ -89,12 +91,12 @@ const purposes = [
 ];
 
 const statusOptions = [
-  { value: "novo", label: "Novo", color: "bg-green-500" },
-  { value: "em_contato", label: "Em Contato", color: "bg-yellow-500" },
-  { value: "visitou", label: "Visitou Imóvel", color: "bg-blue-500" },
-  { value: "negociando", label: "Negociando", color: "bg-orange-500" },
-  { value: "fechado", label: "Fechado", color: "bg-emerald-600" },
-  { value: "perdido", label: "Perdido", color: "bg-red-500" },
+  { value: "novo", label: "Novo" },
+  { value: "em_contato", label: "Em Contato" },
+  { value: "visitou", label: "Visitou Imóvel" },
+  { value: "negociando", label: "Negociando" },
+  { value: "fechado", label: "Fechado" },
+  { value: "perdido", label: "Perdido" },
 ];
 
 const originOptions = [
@@ -114,30 +116,60 @@ const financingOptions = [
   { value: "false", label: "Não" },
 ];
 
-interface ClientsProps {
-  onNavigateToFilteredProperties?: (propertyIds: string[], clientName: string) => void;
+// Função para obter badge de status com cor e ícone
+function getStatusBadge(status: string | null) {
+  const statusConfig: Record<string, { label: string; className: string; icon: any }> = {
+    novo: {
+      label: "Novo",
+      className: "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20",
+      icon: Circle
+    },
+    em_contato: {
+      label: "Em Contato",
+      className: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20",
+      icon: AlertCircle
+    },
+    visitou: {
+      label: "Visitou",
+      className: "bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/20",
+      icon: CheckCircle2
+    },
+    negociando: {
+      label: "Negociando",
+      className: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20",
+      icon: AlertCircle
+    },
+    fechado: {
+      label: "Fechado",
+      className: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20",
+      icon: CheckCircle2
+    },
+    perdido: {
+      label: "Perdido",
+      className: "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20",
+      icon: XCircle
+    }
+  };
+
+  const config = statusConfig[status || "novo"] || statusConfig.novo;
+  const Icon = config.icon;
+
+  return (
+    <Badge variant="outline" className={config.className}>
+      <Icon className="w-3 h-3 mr-1" />
+      {config.label}
+    </Badge>
+  );
 }
 
-export default function Clients({ onNavigateToFilteredProperties }: ClientsProps) {
+export default function Clients() {
   const [clients, setClients] = useState<Client[]>([]);
-  const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [formData, setFormData] = useState(emptyClient);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isMatchModalOpen, setIsMatchModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [corretorId, setCorretorId] = useState<string | null>(null);
-  const [selectedClientMatches, setSelectedClientMatches] = useState<Property[]>([]);
-  const [selectedClientName, setSelectedClientName] = useState("");
-
-  // Estados dos filtros
-  const [showFilters, setShowFilters] = useState(false);
-  const [filterStatus, setFilterStatus] = useState<string>("all");
-  const [filterPropertyType, setFilterPropertyType] = useState<string>("all");
-  const [filterOrigin, setFilterOrigin] = useState<string>("all");
-  const [filterBudgetMin, setFilterBudgetMin] = useState<string>("");
-  const [filterBudgetMax, setFilterBudgetMax] = useState<string>("");
 
   // Buscar corretor_id do usuário logado
   useEffect(() => {
@@ -155,12 +187,9 @@ export default function Clients({ onNavigateToFilteredProperties }: ClientsProps
     getCorretorId();
   }, []);
 
-  // Buscar clientes e imóveis quando tiver corretor_id
+  // Buscar clientes quando tiver corretor_id
   useEffect(() => {
-    if (corretorId) {
-      fetchClients();
-      fetchProperties();
-    }
+    if (corretorId) fetchClients();
   }, [corretorId]);
 
   async function fetchClients() {
@@ -178,154 +207,15 @@ export default function Clients({ onNavigateToFilteredProperties }: ClientsProps
     }
   }
 
-  async function fetchProperties() {
-    const { data, error } = await supabase
-      .from("properties" as any)
-      .select("*")
-      .eq("corretor_id", corretorId)
-      .eq("status", "disponivel")
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      console.error("Erro ao buscar imóveis:", error);
-    } else {
-      setProperties((data as unknown as Property[]) || []);
-    }
-  }
-
-  // Função para encontrar imóveis compatíveis com um cliente
-  function findMatchingProperties(client: Client): Property[] {
-    return properties.filter((prop) => {
-      let matches = true;
-
-      if (client.pref_location && prop.neighborhood) {
-        const clientLocation = client.pref_location.toLowerCase();
-        const propLocation = prop.neighborhood.toLowerCase();
-        if (!propLocation.includes(clientLocation) && !clientLocation.includes(propLocation)) {
-          matches = false;
-        }
-      } else if (client.pref_location && prop.location) {
-        const clientLocation = client.pref_location.toLowerCase();
-        const propLocation = prop.location.toLowerCase();
-        if (!propLocation.includes(clientLocation) && !clientLocation.includes(propLocation)) {
-          matches = false;
-        }
-      }
-
-      if (client.property_type && prop.property_type) {
-        if (client.property_type !== prop.property_type) {
-          matches = false;
-        }
-      }
-
-      if (client.pref_min_bedrooms && prop.bedrooms) {
-        if (prop.bedrooms < client.pref_min_bedrooms) {
-          matches = false;
-        }
-      }
-
-      if (client.pref_min_parking && prop.parking_spots) {
-        if (prop.parking_spots < client.pref_min_parking) {
-          matches = false;
-        }
-      }
-
-      if (prop.price) {
-        if (client.budget_min && prop.price < client.budget_min) {
-          matches = false;
-        }
-        if (client.budget_max && prop.price > client.budget_max) {
-          matches = false;
-        }
-      }
-
-      return matches;
-    });
-  }
-
-  // Abrir modal de matches
-  function openMatchModal(client: Client) {
-    const matches = findMatchingProperties(client);
-    setSelectedClientMatches(matches);
-    setSelectedClientName(client.name);
-    setIsMatchModalOpen(true);
-  }
-
-  // Navegar para imóveis filtrados
-  function handleViewFilteredProperties() {
-    if (onNavigateToFilteredProperties && selectedClientMatches.length > 0) {
-      const propertyIds = selectedClientMatches.map(p => p.id);
-      onNavigateToFilteredProperties(propertyIds, selectedClientName);
-      setIsMatchModalOpen(false);
-    }
-  }
-
-  // Limpar filtros
-  function clearFilters() {
-    setFilterStatus("all");
-    setFilterPropertyType("all");
-    setFilterOrigin("all");
-    setFilterBudgetMin("");
-    setFilterBudgetMax("");
-  }
-
-  // Contar filtros ativos
-  function countActiveFilters() {
-    let count = 0;
-    if (filterStatus !== "all") count++;
-    if (filterPropertyType !== "all") count++;
-    if (filterOrigin !== "all") count++;
-    if (filterBudgetMin) count++;
-    if (filterBudgetMax) count++;
-    return count;
-  }
-
-  // Filtrar clientes
+  // Filtrar clientes pela busca
   const filteredClients = clients.filter((client) => {
-    // Filtro por busca de texto
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      const matchesSearch = (
-        client.name.toLowerCase().includes(term) ||
-        client.phone?.toLowerCase().includes(term) ||
-        client.email?.toLowerCase().includes(term) ||
-        client.pref_location?.toLowerCase().includes(term)
-      );
-      if (!matchesSearch) return false;
-    }
-
-    // Filtro por status
-    if (filterStatus !== "all" && client.status !== filterStatus) {
-      return false;
-    }
-
-    // Filtro por tipo de imóvel
-    if (filterPropertyType !== "all" && client.property_type !== filterPropertyType) {
-      return false;
-    }
-
-    // Filtro por origem
-    if (filterOrigin !== "all" && client.origin !== filterOrigin) {
-      return false;
-    }
-
-    // Filtro por orçamento mínimo
-    if (filterBudgetMin) {
-      const minValue = parseFloat(filterBudgetMin);
-      if (client.budget_max && client.budget_max < minValue) {
-        return false;
-      }
-    }
-
-    // Filtro por orçamento máximo
-    if (filterBudgetMax) {
-      const maxValue = parseFloat(filterBudgetMax);
-      if (client.budget_min && client.budget_min > maxValue) {
-        return false;
-      }
-    }
-
-    return true;
+    const term = searchTerm.toLowerCase();
+    return (
+      client.name.toLowerCase().includes(term) ||
+      client.phone?.toLowerCase().includes(term) ||
+      client.email?.toLowerCase().includes(term) ||
+      client.pref_location?.toLowerCase().includes(term)
+    );
   });
 
   // Abrir modal para novo cliente
@@ -435,11 +325,7 @@ export default function Clients({ onNavigateToFilteredProperties }: ClientsProps
     }).format(value);
   }
 
-  // Buscar labels e cores
-  function getStatusInfo(status: string | null) {
-    return statusOptions.find((s) => s.value === status) || { label: status || "-", color: "bg-gray-500" };
-  }
-
+  // Buscar labels
   function getPropertyTypeLabel(type: string | null) {
     return propertyTypes.find((p) => p.value === type)?.label || type || "-";
   }
@@ -452,19 +338,18 @@ export default function Clients({ onNavigateToFilteredProperties }: ClientsProps
     return originOptions.find((o) => o.value === origin)?.label || origin || "-";
   }
 
-  const activeFiltersCount = countActiveFilters();
-
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
           <Users className="w-6 h-6" />
-          Clientes ({filteredClients.length})
+          Clientes ({clients.length})
         </h1>
 
-        <div className="flex gap-2 w-full sm:w-auto">
-          <div className="relative flex-1 sm:w-64">
+        <div className="flex gap-3 w-full sm:w-auto">
+          {/* Busca */}
+          <div className="relative flex-1 sm:w-72">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               placeholder="Buscar cliente..."
@@ -473,19 +358,8 @@ export default function Clients({ onNavigateToFilteredProperties }: ClientsProps
               className="pl-9"
             />
           </div>
-          <Button 
-            variant={showFilters ? "default" : "outline"} 
-            onClick={() => setShowFilters(!showFilters)}
-            className="relative"
-          >
-            <Filter className="w-4 h-4 mr-2" />
-            Filtros
-            {activeFiltersCount > 0 && (
-              <span className="absolute -top-2 -right-2 bg-primary text-primary-foreground text-xs w-5 h-5 rounded-full flex items-center justify-center">
-                {activeFiltersCount}
-              </span>
-            )}
-          </Button>
+
+          {/* Botão Novo Cliente */}
           <Button onClick={openNewClientModal}>
             <Plus className="w-4 h-4 mr-2" />
             Novo
@@ -493,231 +367,110 @@ export default function Clients({ onNavigateToFilteredProperties }: ClientsProps
         </div>
       </div>
 
-      {/* Painel de Filtros */}
-{showFilters && (
-  <Card className="border-dashed">
-    <CardContent className="p-4">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-medium flex items-center gap-2">
-          <Filter className="w-4 h-4" />
-          Filtros Avançados
-        </h3>
-        {activeFiltersCount > 0 && (
-          <Button variant="ghost" size="sm" onClick={clearFilters}>
-            <X className="w-4 h-4 mr-1" />
-            Limpar filtros
-          </Button>
-        )}
-      </div>
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-muted-foreground">Status</label>
-          <Select value={filterStatus} onValueChange={setFilterStatus}>
-            <SelectTrigger>
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              {statusOptions.map((s) => (
-                <SelectItem key={s.value} value={s.value}>
-                  <div className="flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full ${s.color}`}></span>
-                    {s.label}
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-muted-foreground">Tipo de Imóvel</label>
-          <Select value={filterPropertyType} onValueChange={setFilterPropertyType}>
-            <SelectTrigger>
-              <SelectValue placeholder="Tipo de imóvel" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              {propertyTypes.map((type) => (
-                <SelectItem key={type.value} value={type.value}>
-                  {type.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-muted-foreground">Origem</label>
-          <Select value={filterOrigin} onValueChange={setFilterOrigin}>
-            <SelectTrigger>
-              <SelectValue placeholder="Origem" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas</SelectItem>
-              {originOptions.map((o) => (
-                <SelectItem key={o.value} value={o.value}>
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-muted-foreground">Orçamento Mín</label>
-          <Input
-            type="number"
-            placeholder="R$ 0"
-            value={filterBudgetMin}
-            onChange={(e) => setFilterBudgetMin(e.target.value)}
-          />
-        </div>
-
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-muted-foreground">Orçamento Máx</label>
-          <Input
-            type="number"
-            placeholder="R$ 999.999"
-            value={filterBudgetMax}
-            onChange={(e) => setFilterBudgetMax(e.target.value)}
-          />
-        </div>
-      </div>
-    </CardContent>
-  </Card>
-)}
       {/* Lista de Clientes */}
       <div className="space-y-4">
         {filteredClients.length === 0 ? (
           <Card>
             <CardContent className="py-8 text-center text-muted-foreground">
-              {searchTerm || activeFiltersCount > 0 
-                ? "Nenhum cliente encontrado com os filtros aplicados." 
-                : "Nenhum cliente cadastrado. Clique em 'Novo' para adicionar."}
+              {searchTerm ? "Nenhum cliente encontrado." : "Nenhum cliente cadastrado. Clique em 'Novo' para adicionar."}
             </CardContent>
           </Card>
         ) : (
-          filteredClients.map((client) => {
-            const matchingProperties = findMatchingProperties(client);
-            const matchCount = matchingProperties.length;
-            const statusInfo = getStatusInfo(client.status);
-
-            return (
-              <Card key={client.id} className="overflow-hidden hover:shadow-md transition-shadow">
-                <CardContent className="p-4">
-                  <div className="space-y-3">
-                    {/* Header do card */}
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-semibold text-lg">{client.name}</h3>
-                          <span className={`px-2 py-0.5 rounded-full text-xs text-white ${statusInfo.color}`}>
-                            {statusInfo.label}
+          filteredClients.map((client) => (
+            <Card key={client.id} className="overflow-hidden hover:shadow-md transition-shadow">
+              <CardContent className="p-4">
+                <div className="space-y-3">
+                  {/* Header do card */}
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <h3 className="font-semibold text-lg">{client.name}</h3>
+                        {getStatusBadge(client.status)}
+                      </div>
+                      
+                      {/* Informações de contato com ícones */}
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                        {client.phone && (
+                          <span className="flex items-center gap-1">
+                            <Phone className="w-3.5 h-3.5" />
+                            {client.phone}
                           </span>
-                        </div>
-                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground mt-1">
-                          {client.phone && (
-                            <span className="flex items-center gap-1">
-                              <Phone className="w-3 h-3" /> {client.phone}
-                            </span>
-                          )}
-                          {client.email && (
-                            <span className="flex items-center gap-1">
-                              <Mail className="w-3 h-3" /> {client.email}
-                            </span>
-                          )}
-                          {client.origin && (
-                            <span className="flex items-center gap-1">
-                              <Tag className="w-3 h-3" /> {getOriginLabel(client.origin)}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex gap-1">
-                        <Button variant="ghost" size="icon" onClick={() => openEditModal(client)}>
-                          <Edit2 className="w-4 h-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleDelete(client.id)} className="text-destructive">
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        )}
+                        {client.email && (
+                          <span className="flex items-center gap-1">
+                            <Mail className="w-3.5 h-3.5" />
+                            {client.email}
+                          </span>
+                        )}
+                        {client.origin && (
+                          <span className="flex items-center gap-1">
+                            <MapPin className="w-3.5 h-3.5" />
+                            {getOriginLabel(client.origin)}
+                          </span>
+                        )}
                       </div>
                     </div>
-
-                    {/* Detalhes do interesse */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-3 bg-muted/50 rounded-lg text-sm">
-                      <div>
-                        <span className="text-muted-foreground">Tipo:</span>
-                        <p className="font-medium">{getPropertyTypeLabel(client.property_type)}</p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Finalidade:</span>
-                        <p className="font-medium">{getPurposeLabel(client.purpose)}</p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Bairros:</span>
-                        <p className="font-medium">{client.pref_location || "-"}</p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Quartos/Vagas:</span>
-                        <p className="font-medium">
-                          {client.pref_min_bedrooms || 0}+ quartos, {client.pref_min_parking || 0}+ vagas
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Faixa de preço:</span>
-                        <p className="font-medium">
-                          {formatCurrency(client.budget_min)} - {formatCurrency(client.budget_max)}
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Financiamento:</span>
-                        <p className="font-medium">
-                          {client.accepts_financing === true ? "Sim" : client.accepts_financing === false ? "Não" : "-"}
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Entrada:</span>
-                        <p className="font-medium">{formatCurrency(client.down_payment_value)}</p>
-                      </div>
+                    
+                    {/* Botões de ação */}
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="icon" onClick={() => openEditModal(client)}>
+                        <Edit2 className="w-4 h-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => handleDelete(client.id)} className="text-destructive">
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
                     </div>
-
-                    {/* MATCH DE IMÓVEIS */}
-                    <div 
-                      className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-all ${
-                        matchCount > 0 
-                          ? "bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 hover:bg-green-100 dark:hover:bg-green-900/30" 
-                          : "bg-muted/30 border border-transparent"
-                      }`}
-                      onClick={() => matchCount > 0 && openMatchModal(client)}
-                    >
-                      <div className="flex items-center gap-2">
-                        <Home className={`w-5 h-5 ${matchCount > 0 ? "text-green-600" : "text-muted-foreground"}`} />
-                        <span className={`font-medium ${matchCount > 0 ? "text-green-700 dark:text-green-400" : "text-muted-foreground"}`}>
-                          {matchCount > 0 
-                            ? `${matchCount} imóvel(is) compatível(is)` 
-                            : "Nenhum imóvel compatível no momento"}
-                        </span>
-                      </div>
-                      {matchCount > 0 && (
-                        <span className="text-sm text-green-600 dark:text-green-400 flex items-center gap-1">
-                          Ver detalhes <Eye className="w-4 h-4" />
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Observações */}
-                    {client.notes && (
-                      <div className="text-sm p-2 bg-muted/50 rounded border border-border">
-                        <span className="text-muted-foreground font-medium">Observações: </span>
-                        {client.notes}
-                      </div>
-                    )}
                   </div>
-                </CardContent>
-              </Card>
-            );
-          })
+
+                  {/* Detalhes do interesse */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-3 bg-muted/50 rounded-lg text-sm">
+                    <div>
+                      <span className="text-muted-foreground">Tipo:</span>
+                      <p className="font-medium">{getPropertyTypeLabel(client.property_type)}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Finalidade:</span>
+                      <p className="font-medium">{getPurposeLabel(client.purpose)}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Bairros:</span>
+                      <p className="font-medium">{client.pref_location || "-"}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Quartos/Vagas:</span>
+                      <p className="font-medium">
+                        {client.pref_min_bedrooms || 0}+ quartos, {client.pref_min_parking || 0}+ vagas
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Faixa de preço:</span>
+                      <p className="font-medium">
+                        {formatCurrency(client.budget_min)} - {formatCurrency(client.budget_max)}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Financiamento:</span>
+                      <p className="font-medium">
+                        {client.accepts_financing === true ? "Sim" : client.accepts_financing === false ? "Não" : "-"}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Entrada:</span>
+                      <p className="font-medium">{formatCurrency(client.down_payment_value)}</p>
+                    </div>
+                  </div>
+
+                  {/* Observações */}
+                  {client.notes && (
+                    <div className="flex gap-2 text-sm p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                      <FileText className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                      <span className="text-amber-900 dark:text-amber-100">{client.notes}</span>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))
         )}
       </div>
 
@@ -729,159 +482,207 @@ export default function Clients({ onNavigateToFilteredProperties }: ClientsProps
           </DialogHeader>
 
           <div className="space-y-4 py-4">
+            {/* Dados básicos */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Input
-                placeholder="Nome completo *"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              />
-              <Input
-                placeholder="Telefone/WhatsApp"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-              />
-              <Input
-                placeholder="E-mail"
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              />
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Nome completo *</label>
+                <Input
+                  placeholder="Nome completo"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Telefone/WhatsApp</label>
+                <Input
+                  placeholder="(00) 00000-0000"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">E-mail</label>
+                <Input
+                  placeholder="email@exemplo.com"
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                />
+              </div>
             </div>
 
+            {/* O que busca */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Select
-                value={formData.property_type}
-                onValueChange={(value) => setFormData({ ...formData, property_type: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Tipo de imóvel" />
-                </SelectTrigger>
-                <SelectContent>
-                  {propertyTypes.map((type) => (
-                    <SelectItem key={type.value} value={type.value}>
-                      {type.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Tipo de imóvel</label>
+                <Select
+                  value={formData.property_type}
+                  onValueChange={(value) => setFormData({ ...formData, property_type: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {propertyTypes.map((type) => (
+                      <SelectItem key={type.value} value={type.value}>
+                        {type.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-              <Select
-                value={formData.purpose}
-                onValueChange={(value) => setFormData({ ...formData, purpose: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Finalidade" />
-                </SelectTrigger>
-                <SelectContent>
-                  {purposes.map((p) => (
-                    <SelectItem key={p.value} value={p.value}>
-                      {p.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Finalidade</label>
+                <Select
+                  value={formData.purpose}
+                  onValueChange={(value) => setFormData({ ...formData, purpose: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a finalidade" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {purposes.map((p) => (
+                      <SelectItem key={p.value} value={p.value}>
+                        {p.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-              <Input
-                placeholder="Bairros de interesse"
-                value={formData.pref_location}
-                onChange={(e) => setFormData({ ...formData, pref_location: e.target.value })}
-              />
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Bairros de interesse</label>
+                <Input
+                  placeholder="Ex: Centro, Batel, Água Verde"
+                  value={formData.pref_location}
+                  onChange={(e) => setFormData({ ...formData, pref_location: e.target.value })}
+                />
+              </div>
 
-              <Select
-                value={formData.origin}
-                onValueChange={(value) => setFormData({ ...formData, origin: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Origem do lead" />
-                </SelectTrigger>
-                <SelectContent>
-                  {originOptions.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
-                      {o.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Origem do lead</label>
+                <Select
+                  value={formData.origin}
+                  onValueChange={(value) => setFormData({ ...formData, origin: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="De onde veio?" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {originOptions.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
+            {/* Preferências */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <Input
-                type="number"
-                placeholder="Quartos (mín)"
-                value={formData.pref_min_bedrooms}
-                onChange={(e) => setFormData({ ...formData, pref_min_bedrooms: e.target.value })}
-              />
-              <Input
-                type="number"
-                placeholder="Vagas (mín)"
-                value={formData.pref_min_parking}
-                onChange={(e) => setFormData({ ...formData, pref_min_parking: e.target.value })}
-              />
-              <Input
-                type="number"
-                placeholder="Valor mínimo (R$)"
-                value={formData.budget_min}
-                onChange={(e) => setFormData({ ...formData, budget_min: e.target.value })}
-              />
-              <Input
-                type="number"
-                placeholder="Valor máximo (R$)"
-                value={formData.budget_max}
-                onChange={(e) => setFormData({ ...formData, budget_max: e.target.value })}
-              />
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Quartos (mín)</label>
+                <Input
+                  type="number"
+                  placeholder="2"
+                  value={formData.pref_min_bedrooms}
+                  onChange={(e) => setFormData({ ...formData, pref_min_bedrooms: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Vagas (mín)</label>
+                <Input
+                  type="number"
+                  placeholder="1"
+                  value={formData.pref_min_parking}
+                  onChange={(e) => setFormData({ ...formData, pref_min_parking: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Valor mínimo (R$)</label>
+                <Input
+                  type="number"
+                  placeholder="200000"
+                  value={formData.budget_min}
+                  onChange={(e) => setFormData({ ...formData, budget_min: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Valor máximo (R$)</label>
+                <Input
+                  type="number"
+                  placeholder="500000"
+                  value={formData.budget_max}
+                  onChange={(e) => setFormData({ ...formData, budget_max: e.target.value })}
+                />
+              </div>
             </div>
 
+            {/* Financiamento e Status */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Select
-                value={formData.accepts_financing}
-                onValueChange={(value) => setFormData({ ...formData, accepts_financing: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Aceita financiamento?" />
-                </SelectTrigger>
-                <SelectContent>
-                  {financingOptions.map((f) => (
-                    <SelectItem key={f.value} value={f.value}>
-                      {f.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Aceita financiamento?</label>
+                <Select
+                  value={formData.accepts_financing}
+                  onValueChange={(value) => setFormData({ ...formData, accepts_financing: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {financingOptions.map((f) => (
+                      <SelectItem key={f.value} value={f.value}>
+                        {f.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-              <Input
-                type="number"
-                placeholder="Valor de entrada (R$)"
-                value={formData.down_payment_value}
-                onChange={(e) => setFormData({ ...formData, down_payment_value: e.target.value })}
-              />
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Valor de entrada (R$)</label>
+                <Input
+                  type="number"
+                  placeholder="50000"
+                  value={formData.down_payment_value}
+                  onChange={(e) => setFormData({ ...formData, down_payment_value: e.target.value })}
+                />
+              </div>
 
-              <Select
-                value={formData.status}
-                onValueChange={(value) => setFormData({ ...formData, status: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  {statusOptions.map((s) => (
-                    <SelectItem key={s.value} value={s.value}>
-                      <div className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full ${s.color}`}></span>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Status</label>
+                <Select
+                  value={formData.status}
+                  onValueChange={(value) => setFormData({ ...formData, status: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {statusOptions.map((s) => (
+                      <SelectItem key={s.value} value={s.value}>
                         {s.label}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
-            <Textarea
-              placeholder="Observações sobre o cliente..."
-              value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              rows={3}
-            />
+            {/* Observações */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">Observações</label>
+              <Textarea
+                placeholder="Informações adicionais sobre o cliente..."
+                value={formData.notes}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                rows={3}
+              />
+            </div>
 
+            {/* Botões */}
             <div className="flex gap-3 pt-4">
               <Button onClick={handleSave} disabled={loading} className="flex-1">
                 {loading ? "Salvando..." : editingId ? "Salvar Alterações" : "Cadastrar Cliente"}
@@ -890,74 +691,6 @@ export default function Clients({ onNavigateToFilteredProperties }: ClientsProps
                 Cancelar
               </Button>
             </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* MODAL DE IMÓVEIS COMPATÍVEIS */}
-      <Dialog open={isMatchModalOpen} onOpenChange={setIsMatchModalOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Home className="w-5 h-5 text-green-600" />
-              Imóveis compatíveis para {selectedClientName}
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            {selectedClientMatches.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">
-                Nenhum imóvel compatível encontrado.
-              </p>
-            ) : (
-              <>
-                <Button 
-                  onClick={handleViewFilteredProperties}
-                  className="w-full"
-                  variant="outline"
-                >
-                  <Eye className="w-4 h-4 mr-2" />
-                  Ver todos na aba Imóveis ({selectedClientMatches.length})
-                </Button>
-
-                {selectedClientMatches.map((prop) => (
-                  <Card key={prop.id} className="overflow-hidden hover:shadow-md transition-shadow">
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-lg">{prop.title}</h3>
-                          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground mt-1">
-                            <span className="flex items-center gap-1">
-                              <MapPin className="w-3 h-3" />
-                              {prop.neighborhood || prop.location || "-"}
-                              {prop.city ? `, ${prop.city}` : ""}
-                            </span>
-                          </div>
-
-                          <div className="flex flex-wrap gap-3 mt-3 text-sm">
-                            <span className="flex items-center gap-1 bg-muted px-2 py-1 rounded">
-                              <Bed className="w-4 h-4" /> {prop.bedrooms || 0} quartos
-                            </span>
-                            <span className="flex items-center gap-1 bg-muted px-2 py-1 rounded">
-                              <Car className="w-4 h-4" /> {prop.parking_spots || 0} vagas
-                            </span>
-                            <span className="bg-muted px-2 py-1 rounded">
-                              {getPropertyTypeLabel(prop.property_type)}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex flex-col items-end gap-2">
-                          <span className="font-bold text-primary text-lg">
-                            {formatCurrency(prop.price)}
-                          </span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </>
-            )}
           </div>
         </DialogContent>
       </Dialog>
