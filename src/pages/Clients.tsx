@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,17 +9,15 @@ import { toast } from "sonner";
 import { 
   Users, 
   Trash2, 
-  Edit2, 
   Search, 
   Plus,
   Phone,
-  Mail,
   MapPin,
-  FileText,
   Circle,
   CheckCircle2,
   XCircle,
-  AlertCircle
+  AlertCircle,
+  ChevronRight
 } from "lucide-react";
 import {
   Select,
@@ -163,12 +162,12 @@ function getStatusBadge(status: string | null) {
 }
 
 export default function Clients() {
+  const navigate = useNavigate();
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [formData, setFormData] = useState(emptyClient);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [corretorId, setCorretorId] = useState<string | null>(null);
 
   // Buscar corretor_id do usuário logado
@@ -221,34 +220,15 @@ export default function Clients() {
   // Abrir modal para novo cliente
   function openNewClientModal() {
     setFormData(emptyClient);
-    setEditingId(null);
     setIsModalOpen(true);
   }
 
-  // Abrir modal para editar cliente
-  function openEditModal(client: Client) {
-    setEditingId(client.id);
-    setFormData({
-      name: client.name || "",
-      phone: client.phone || "",
-      email: client.email || "",
-      property_type: client.property_type || "",
-      purpose: client.purpose || "",
-      pref_location: client.pref_location || "",
-      pref_min_bedrooms: client.pref_min_bedrooms?.toString() || "",
-      pref_min_parking: client.pref_min_parking?.toString() || "",
-      budget_min: client.budget_min?.toString() || "",
-      budget_max: client.budget_max?.toString() || "",
-      accepts_financing: client.accepts_financing === true ? "true" : client.accepts_financing === false ? "false" : "",
-      down_payment_value: client.down_payment_value?.toString() || "",
-      status: client.status || "novo",
-      origin: client.origin || "",
-      notes: client.notes || "",
-    });
-    setIsModalOpen(true);
+  // Navegar para página de detalhes do cliente
+  function goToClientDetail(clientId: string) {
+    navigate(`/cliente/${clientId}`);
   }
 
-  // Salvar (criar ou atualizar)
+  // Salvar novo cliente
   async function handleSave() {
     if (!formData.name) return toast.error("Nome é obrigatório");
     if (!corretorId) return toast.error("Erro: corretor não identificado");
@@ -274,37 +254,26 @@ export default function Clients() {
       notes: formData.notes || null,
     };
 
-    let error;
-
-    if (editingId) {
-      const result = await supabase
-        .from("clients" as any)
-        .update(clientData)
-        .eq("id", editingId);
-      error = result.error;
-    } else {
-      const result = await supabase
-        .from("clients" as any)
-        .insert([clientData]);
-      error = result.error;
-    }
+    const { error } = await supabase
+      .from("clients" as any)
+      .insert([clientData]);
 
     setLoading(false);
 
     if (error) {
-      toast.error(editingId ? "Erro ao atualizar cliente" : "Erro ao salvar cliente");
+      toast.error("Erro ao salvar cliente");
       console.error(error);
     } else {
-      toast.success(editingId ? "Cliente atualizado!" : "Cliente cadastrado!");
+      toast.success("Cliente cadastrado!");
       setIsModalOpen(false);
       setFormData(emptyClient);
-      setEditingId(null);
       fetchClients();
     }
   }
 
-  // Deletar cliente
-  async function handleDelete(id: string) {
+  // Deletar cliente (com confirmação)
+  async function handleDelete(e: React.MouseEvent, id: string) {
+    e.stopPropagation(); // Evita navegar para detalhes ao clicar em excluir
     if (!confirm("Tem certeza que deseja excluir este cliente?")) return;
 
     const { error } = await supabase.from("clients" as any).delete().eq("id", id);
@@ -316,24 +285,7 @@ export default function Clients() {
     }
   }
 
-  // Formatar valor como moeda
-  function formatCurrency(value: number | null) {
-    if (!value) return "-";
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    }).format(value);
-  }
-
-  // Buscar labels
-  function getPropertyTypeLabel(type: string | null) {
-    return propertyTypes.find((p) => p.value === type)?.label || type || "-";
-  }
-
-  function getPurposeLabel(purpose: string | null) {
-    return purposes.find((p) => p.value === purpose)?.label || purpose || "-";
-  }
-
+  // Buscar label da origem
   function getOriginLabel(origin: string | null) {
     return originOptions.find((o) => o.value === origin)?.label || origin || "-";
   }
@@ -367,8 +319,8 @@ export default function Clients() {
         </div>
       </div>
 
-      {/* Lista de Clientes */}
-      <div className="space-y-4">
+      {/* Lista de Clientes - CARDS SIMPLIFICADOS */}
+      <div className="space-y-2">
         {filteredClients.length === 0 ? (
           <Card>
             <CardContent className="py-8 text-center text-muted-foreground">
@@ -377,96 +329,49 @@ export default function Clients() {
           </Card>
         ) : (
           filteredClients.map((client) => (
-            <Card key={client.id} className="overflow-hidden hover:shadow-md transition-shadow">
+            <Card 
+              key={client.id} 
+              className="overflow-hidden hover:shadow-md hover:bg-muted/30 transition-all cursor-pointer group"
+              onClick={() => goToClientDetail(client.id)}
+            >
               <CardContent className="p-4">
-                <div className="space-y-3">
-                  {/* Header do card */}
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <h3 className="font-semibold text-lg">{client.name}</h3>
-                        {getStatusBadge(client.status)}
-                      </div>
-                      
-                      {/* Informações de contato com ícones */}
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                        {client.phone && (
-                          <span className="flex items-center gap-1">
-                            <Phone className="w-3.5 h-3.5" />
-                            {client.phone}
-                          </span>
-                        )}
-                        {client.email && (
-                          <span className="flex items-center gap-1">
-                            <Mail className="w-3.5 h-3.5" />
-                            {client.email}
-                          </span>
-                        )}
-                        {client.origin && (
-                          <span className="flex items-center gap-1">
-                            <MapPin className="w-3.5 h-3.5" />
-                            {getOriginLabel(client.origin)}
-                          </span>
-                        )}
-                      </div>
+                <div className="flex items-center justify-between">
+                  {/* Informações principais */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-3 mb-1">
+                      <h3 className="font-semibold text-base truncate">{client.name}</h3>
+                      {getStatusBadge(client.status)}
                     </div>
                     
-                    {/* Botões de ação */}
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => openEditModal(client)}>
-                        <Edit2 className="w-4 h-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(client.id)} className="text-destructive">
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                    {/* Telefone e Origem */}
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                      {client.phone && (
+                        <span className="flex items-center gap-1">
+                          <Phone className="w-3.5 h-3.5" />
+                          {client.phone}
+                        </span>
+                      )}
+                      {client.origin && (
+                        <span className="flex items-center gap-1">
+                          <MapPin className="w-3.5 h-3.5" />
+                          {getOriginLabel(client.origin)}
+                        </span>
+                      )}
                     </div>
                   </div>
-
-                  {/* Detalhes do interesse */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-3 bg-muted/50 rounded-lg text-sm">
-                    <div>
-                      <span className="text-muted-foreground">Tipo:</span>
-                      <p className="font-medium">{getPropertyTypeLabel(client.property_type)}</p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Finalidade:</span>
-                      <p className="font-medium">{getPurposeLabel(client.purpose)}</p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Bairros:</span>
-                      <p className="font-medium">{client.pref_location || "-"}</p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Quartos/Vagas:</span>
-                      <p className="font-medium">
-                        {client.pref_min_bedrooms || 0}+ quartos, {client.pref_min_parking || 0}+ vagas
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Faixa de preço:</span>
-                      <p className="font-medium">
-                        {formatCurrency(client.budget_min)} - {formatCurrency(client.budget_max)}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Financiamento:</span>
-                      <p className="font-medium">
-                        {client.accepts_financing === true ? "Sim" : client.accepts_financing === false ? "Não" : "-"}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Entrada:</span>
-                      <p className="font-medium">{formatCurrency(client.down_payment_value)}</p>
-                    </div>
+                  
+                  {/* Ações */}
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      onClick={(e) => handleDelete(e, client.id)} 
+                      className="text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                    <ChevronRight className="w-5 h-5 text-muted-foreground" />
                   </div>
-
-                  {/* Observações */}
-                  {client.notes && (
-                    <div className="flex gap-2 text-sm p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
-                      <FileText className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-                      <span className="text-amber-900 dark:text-amber-100">{client.notes}</span>
-                    </div>
-                  )}
                 </div>
               </CardContent>
             </Card>
@@ -474,11 +379,11 @@ export default function Clients() {
         )}
       </div>
 
-      {/* MODAL DE CADASTRO/EDIÇÃO */}
+      {/* MODAL DE CADASTRO DE NOVO CLIENTE */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingId ? "Editar Cliente" : "Novo Cliente"}</DialogTitle>
+            <DialogTitle>Novo Cliente</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
@@ -685,7 +590,7 @@ export default function Clients() {
             {/* Botões */}
             <div className="flex gap-3 pt-4">
               <Button onClick={handleSave} disabled={loading} className="flex-1">
-                {loading ? "Salvando..." : editingId ? "Salvar Alterações" : "Cadastrar Cliente"}
+                {loading ? "Salvando..." : "Cadastrar Cliente"}
               </Button>
               <Button variant="outline" onClick={() => setIsModalOpen(false)}>
                 Cancelar

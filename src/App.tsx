@@ -15,6 +15,7 @@ import UpgradePlano from "./pages/UpgradePlano";
 import CrmKanban from "./pages/CrmKanban";
 import NotFound from "./pages/NotFound";
 import Clients from "./pages/Clients";
+import ClienteDetalhe from "./pages/ClienteDetalhe";
 
 const queryClient = new QueryClient();
 
@@ -27,6 +28,7 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/clients" element={<Clients />} />
+            <Route path="/cliente/:id" element={<ClienteDetalhe />} />
             <Route path="/" element={<Navigate to="/auth" replace />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/planos" element={<Planos />} />
