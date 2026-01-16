@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { 
-  Home, Trash2, Edit2, Search, Plus, MapPin, Bed, Car, Bath, 
-  Ruler, CheckCircle2, Phone 
+  Home, Trash2, Search, Plus, MapPin, 
+  CheckCircle2, Phone, ChevronRight
 } from "lucide-react";
 import {
   Select,
@@ -104,11 +105,11 @@ const purposes = [
 ];
 
 const statusOptions = [
-  { value: "disponivel", label: "🟢 Disponível" },
-  { value: "reservado", label: "🟡 Reservado" },
-  { value: "vendido", label: "✅ Vendido" },
-  { value: "alugado", label: "🔵 Alugado" },
-  { value: "inativo", label: "⚫ Inativo" },
+  { value: "disponivel", label: "Disponível", color: "bg-green-500" },
+  { value: "reservado", label: "Reservado", color: "bg-yellow-500" },
+  { value: "vendido", label: "Vendido", color: "bg-blue-500" },
+  { value: "alugado", label: "Alugado", color: "bg-purple-500" },
+  { value: "inativo", label: "Inativo", color: "bg-gray-500" },
 ];
 
 const booleanOptions = [
@@ -116,13 +117,18 @@ const booleanOptions = [
   { value: "false", label: "Não" },
 ];
 
+// Função para obter configuração do status
+function getStatusConfig(status: string | null) {
+  return statusOptions.find((s) => s.value === status) || statusOptions[0];
+}
+
 export default function Properties() {
+  const navigate = useNavigate();
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [formData, setFormData] = useState(emptyProperty);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [corretorId, setCorretorId] = useState<string | null>(null);
   const [matches, setMatches] = useState<Client[]>([]);
 
@@ -161,23 +167,19 @@ export default function Properties() {
         .select("*")
         .eq("corretor_id", corretorId);
 
-      // Match por bairro
       if (formData.neighborhood) {
         query = query.ilike("pref_location", `%${formData.neighborhood}%`);
       }
 
-      // Match por quartos (cliente quer X ou menos, imóvel tem X)
       if (formData.bedrooms) {
         query = query.lte("pref_min_bedrooms", parseInt(formData.bedrooms));
       }
 
-      // Match por preço (preço do imóvel está na faixa do cliente)
       if (formData.price) {
         const price = parseFloat(formData.price);
         query = query.lte("budget_min", price).gte("budget_max", price);
       }
 
-      // Match por tipo de imóvel
       if (formData.property_type) {
         query = query.eq("property_type", formData.property_type);
       }
@@ -219,40 +221,16 @@ export default function Properties() {
   // Abrir modal para novo imóvel
   function openNewPropertyModal() {
     setFormData(emptyProperty);
-    setEditingId(null);
     setMatches([]);
     setIsModalOpen(true);
   }
 
-  // Abrir modal para editar imóvel
-  function openEditModal(prop: Property) {
-    setEditingId(prop.id);
-    setFormData({
-      title: prop.title || "",
-      property_type: prop.property_type || "",
-      purpose: prop.purpose || "",
-      price: prop.price?.toString() || "",
-      condo_fee: prop.condo_fee?.toString() || "",
-      iptu: prop.iptu?.toString() || "",
-      bedrooms: prop.bedrooms?.toString() || "",
-      bathrooms: prop.bathrooms?.toString() || "",
-      parking_spots: prop.parking_spots?.toString() || "",
-      total_area: prop.total_area?.toString() || "",
-      built_area: prop.built_area?.toString() || "",
-      address: prop.address || "",
-      neighborhood: prop.neighborhood || prop.location || "",
-      city: prop.city || "",
-      state: prop.state || "PR",
-      accepts_financing: prop.accepts_financing === true ? "true" : prop.accepts_financing === false ? "false" : "",
-      accepts_trade: prop.accepts_trade === true ? "true" : prop.accepts_trade === false ? "false" : "",
-      status: prop.status || "disponivel",
-      description: prop.description || "",
-      image_url: prop.image_url || "",
-    });
-    setIsModalOpen(true);
+  // Navegar para página de detalhes do imóvel
+  function goToPropertyDetail(propertyId: string) {
+    navigate(`/imovel/${propertyId}`);
   }
 
-  // Salvar (criar ou atualizar)
+  // Salvar novo imóvel
   async function handleSave() {
     if (!formData.title) return toast.error("Título é obrigatório");
     if (!corretorId) return toast.error("Erro: corretor não identificado");
@@ -274,7 +252,7 @@ export default function Properties() {
       built_area: formData.built_area ? parseFloat(formData.built_area) : null,
       address: formData.address || null,
       neighborhood: formData.neighborhood || null,
-      location: formData.neighborhood || null, // manter compatibilidade
+      location: formData.neighborhood || null,
       city: formData.city || null,
       state: formData.state || "PR",
       accepts_financing: formData.accepts_financing === "true" ? true : formData.accepts_financing === "false" ? false : null,
@@ -284,38 +262,27 @@ export default function Properties() {
       image_url: formData.image_url || null,
     };
 
-    let error;
-
-    if (editingId) {
-      const result = await supabase
-        .from("properties" as any)
-        .update(propertyData)
-        .eq("id", editingId);
-      error = result.error;
-    } else {
-      const result = await supabase
-        .from("properties" as any)
-        .insert([propertyData]);
-      error = result.error;
-    }
+    const { error } = await supabase
+      .from("properties" as any)
+      .insert([propertyData]);
 
     setLoading(false);
 
     if (error) {
-      toast.error(editingId ? "Erro ao atualizar imóvel" : "Erro ao salvar imóvel");
+      toast.error("Erro ao salvar imóvel");
       console.error(error);
     } else {
-      toast.success(editingId ? "Imóvel atualizado!" : "Imóvel cadastrado!");
+      toast.success("Imóvel cadastrado!");
       setIsModalOpen(false);
       setFormData(emptyProperty);
-      setEditingId(null);
       setMatches([]);
       fetchProperties();
     }
   }
 
-  // Deletar imóvel
-  async function handleDelete(id: string) {
+  // Deletar imóvel (com confirmação)
+  async function handleDelete(e: React.MouseEvent, id: string) {
+    e.stopPropagation();
     if (!confirm("Tem certeza que deseja excluir este imóvel?")) return;
 
     const { error } = await supabase.from("properties" as any).delete().eq("id", id);
@@ -334,19 +301,6 @@ export default function Properties() {
       style: "currency",
       currency: "BRL",
     }).format(value);
-  }
-
-  // Buscar labels
-  function getStatusLabel(status: string | null) {
-    return statusOptions.find((s) => s.value === status)?.label || status || "-";
-  }
-
-  function getPropertyTypeLabel(type: string | null) {
-    return propertyTypes.find((p) => p.value === type)?.label || type || "-";
-  }
-
-  function getPurposeLabel(purpose: string | null) {
-    return purposes.find((p) => p.value === purpose)?.label || purpose || "-";
   }
 
   return (
@@ -378,8 +332,8 @@ export default function Properties() {
         </div>
       </div>
 
-      {/* Lista de Imóveis */}
-      <div className="space-y-4">
+      {/* Lista de Imóveis - CARDS SIMPLIFICADOS */}
+      <div className="space-y-2">
         {filteredProperties.length === 0 ? (
           <Card>
             <CardContent className="py-8 text-center text-muted-foreground">
@@ -387,107 +341,72 @@ export default function Properties() {
             </CardContent>
           </Card>
         ) : (
-          filteredProperties.map((prop) => (
-            <Card key={prop.id} className="overflow-hidden hover:shadow-md transition-shadow">
-              <CardContent className="p-4">
-                <div className="space-y-3">
-                  {/* Header do card */}
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-lg">{prop.title}</h3>
-                        <span className="text-sm">{getStatusLabel(prop.status)}</span>
+          filteredProperties.map((prop) => {
+            const statusConfig = getStatusConfig(prop.status);
+            
+            return (
+              <Card 
+                key={prop.id} 
+                className="overflow-hidden hover:shadow-md hover:bg-muted/30 transition-all cursor-pointer group"
+                onClick={() => goToPropertyDetail(prop.id)}
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    {/* Informações principais */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-3 mb-1">
+                        <h3 className="font-semibold text-base truncate">{prop.title}</h3>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`w-2 h-2 rounded-full ${statusConfig.color}`}></span>
+                          <span className="text-xs text-muted-foreground">{statusConfig.label}</span>
+                        </div>
                       </div>
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground mt-1">
+                      
+                      {/* Localização e Valor */}
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
                         <span className="flex items-center gap-1">
-                          <MapPin className="w-3 h-3" />
-                          {prop.neighborhood || prop.location || "-"}{prop.city ? `, ${prop.city}` : ""}
+                          <MapPin className="w-3.5 h-3.5" />
+                          {prop.neighborhood || prop.location || "-"}
+                          {prop.city ? `, ${prop.city}` : ""}
                         </span>
-                        <span className="font-semibold text-primary">
-                          {formatCurrency(prop.price)}
-                        </span>
+                        {prop.address && (
+                          <span className="text-xs truncate max-w-[200px]">
+                            {prop.address}
+                          </span>
+                        )}
                       </div>
+                      
+                      {/* Preço em destaque */}
+                      <p className="font-semibold text-primary mt-1">
+                        {formatCurrency(prop.price)}
+                      </p>
                     </div>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => openEditModal(prop)}>
-                        <Edit2 className="w-4 h-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(prop.id)} className="text-destructive">
+                    
+                    {/* Ações */}
+                    <div className="flex items-center gap-2">
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={(e) => handleDelete(e, prop.id)} 
+                        className="text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
                         <Trash2 className="w-4 h-4" />
                       </Button>
+                      <ChevronRight className="w-5 h-5 text-muted-foreground" />
                     </div>
                   </div>
-
-                  {/* Características */}
-                  <div className="flex flex-wrap gap-4 text-sm">
-                    {prop.bedrooms && (
-                      <span className="flex items-center gap-1">
-                        <Bed className="w-4 h-4 text-muted-foreground" />
-                        {prop.bedrooms} quarto{prop.bedrooms > 1 ? "s" : ""}
-                      </span>
-                    )}
-                    {prop.bathrooms && (
-                      <span className="flex items-center gap-1">
-                        <Bath className="w-4 h-4 text-muted-foreground" />
-                        {prop.bathrooms} banheiro{prop.bathrooms > 1 ? "s" : ""}
-                      </span>
-                    )}
-                    {prop.parking_spots && (
-                      <span className="flex items-center gap-1">
-                        <Car className="w-4 h-4 text-muted-foreground" />
-                        {prop.parking_spots} vaga{prop.parking_spots > 1 ? "s" : ""}
-                      </span>
-                    )}
-                    {prop.total_area && (
-                      <span className="flex items-center gap-1">
-                        <Ruler className="w-4 h-4 text-muted-foreground" />
-                        {prop.total_area}m²
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Info adicional */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-3 bg-muted/50 rounded-lg text-sm">
-                    <div>
-                      <span className="text-muted-foreground">Condomínio:</span>
-                      <p className="font-medium">{formatCurrency(prop.condo_fee)}</p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">IPTU:</span>
-                      <p className="font-medium">{formatCurrency(prop.iptu)}</p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Financiamento:</span>
-                      <p className="font-medium">
-                        {prop.accepts_financing === true ? "Sim" : prop.accepts_financing === false ? "Não" : "-"}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Aceita permuta:</span>
-                      <p className="font-medium">
-                        {prop.accepts_trade === true ? "Sim" : prop.accepts_trade === false ? "Não" : "-"}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Descrição */}
-                  {prop.description && (
-                    <div className="text-sm p-2 bg-muted/30 rounded">
-                      {prop.description}
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))
+                </CardContent>
+              </Card>
+            );
+          })
         )}
       </div>
 
-      {/* MODAL DE CADASTRO/EDIÇÃO */}
+      {/* MODAL DE CADASTRO DE NOVO IMÓVEL */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingId ? "Editar Imóvel" : "Novo Imóvel"}</DialogTitle>
+            <DialogTitle>Novo Imóvel</DialogTitle>
           </DialogHeader>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 py-4">
@@ -736,7 +655,7 @@ export default function Properties() {
               {/* Botões */}
               <div className="flex gap-3 pt-4">
                 <Button onClick={handleSave} disabled={loading} className="flex-1">
-                  {loading ? "Salvando..." : editingId ? "Salvar Alterações" : "Cadastrar Imóvel"}
+                  {loading ? "Salvando..." : "Cadastrar Imóvel"}
                 </Button>
                 <Button variant="outline" onClick={() => setIsModalOpen(false)}>
                   Cancelar
@@ -761,7 +680,7 @@ export default function Properties() {
                   ) : (
                     <div className="space-y-3">
                       <p className="font-bold text-green-700 dark:text-green-400 text-sm">
-                        🎯 {matches.length} cliente(s) interessado(s)!
+                        {matches.length} cliente(s) interessado(s)!
                       </p>
                       {matches.map((client) => (
                         <div key={client.id} className="bg-background p-3 rounded-lg border shadow-sm">

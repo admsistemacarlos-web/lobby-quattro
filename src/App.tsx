@@ -16,6 +16,7 @@ import CrmKanban from "./pages/CrmKanban";
 import NotFound from "./pages/NotFound";
 import Clients from "./pages/Clients";
 import ClienteDetalhe from "./pages/ClienteDetalhe";
+import ImovelDetalhe from "./pages/ImovelDetalhe";
 
 const queryClient = new QueryClient();
 
@@ -29,6 +30,7 @@ const App = () => (
           <Routes>
             <Route path="/clients" element={<Clients />} />
             <Route path="/cliente/:id" element={<ClienteDetalhe />} />
+            <Route path="/imovel/:id" element={<ImovelDetalhe />} />
             <Route path="/" element={<Navigate to="/auth" replace />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/planos" element={<Planos />} />
