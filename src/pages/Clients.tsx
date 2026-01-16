@@ -33,6 +33,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ClientFilters } from "@/components/ClientFilters";
 
 // Tipos
 interface Client {
@@ -170,6 +171,38 @@ export default function Clients() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [corretorId, setCorretorId] = useState<string | null>(null);
 
+  const [filters, setFilters] = useState({
+    propertyType: "",
+    purpose: "",
+    neighborhoods: "",
+    origin: "",
+    minBedrooms: "",
+    minParkingSpots: "",
+    minBudget: "",
+    maxBudget: "",
+    downPayment: "",
+  });
+
+  // Função para atualizar filtros
+  function handleFilterChange(key: string, value: string) {
+    setFilters(prev => ({ ...prev, [key]: value }));
+  }
+
+  // Função para limpar todos os filtros
+  function handleClearFilters() {
+    setFilters({
+      propertyType: "",
+      purpose: "",
+      neighborhoods: "",
+      origin: "",
+      minBedrooms: "",
+      minParkingSpots: "",
+      minBudget: "",
+      maxBudget: "",
+      downPayment: "",
+    });
+  }
+
   // Buscar corretor_id do usuário logado
   useEffect(() => {
     async function getCorretorId() {
@@ -206,15 +239,62 @@ export default function Clients() {
     }
   }
 
-  // Filtrar clientes pela busca
+  // Filtrar clientes pela busca E pelos filtros avançados
   const filteredClients = clients.filter((client) => {
+    // Filtro de busca por texto
     const term = searchTerm.toLowerCase();
-    return (
+    const matchesSearch = 
       client.name.toLowerCase().includes(term) ||
       client.phone?.toLowerCase().includes(term) ||
       client.email?.toLowerCase().includes(term) ||
-      client.pref_location?.toLowerCase().includes(term)
-    );
+      client.pref_location?.toLowerCase().includes(term);
+
+    if (!matchesSearch) return false;
+
+    // Filtros avançados
+    if (filters.propertyType && filters.propertyType !== "all") {
+      if (client.property_type !== filters.propertyType) return false;
+    }
+
+    if (filters.purpose && filters.purpose !== "all") {
+      if (client.purpose !== filters.purpose) return false;
+    }
+
+    if (filters.neighborhoods) {
+      const searchNeighborhoods = filters.neighborhoods.toLowerCase();
+      if (!client.pref_location?.toLowerCase().includes(searchNeighborhoods)) return false;
+    }
+
+    if (filters.origin && filters.origin !== "all") {
+      if (client.origin !== filters.origin) return false;
+    }
+
+    if (filters.minBedrooms) {
+      const minBed = parseInt(filters.minBedrooms);
+      if (!client.pref_min_bedrooms || client.pref_min_bedrooms < minBed) return false;
+    }
+
+    if (filters.minParkingSpots) {
+      const minParking = parseInt(filters.minParkingSpots);
+      if (!client.pref_min_parking || client.pref_min_parking < minParking) return false;
+    }
+
+    if (filters.minBudget) {
+      const minBudget = parseFloat(filters.minBudget);
+      if (!client.budget_min || client.budget_min < minBudget) return false;
+    }
+
+    if (filters.maxBudget) {
+      const maxBudget = parseFloat(filters.maxBudget);
+      if (!client.budget_max || client.budget_max > maxBudget) return false;
+    }
+
+    if (filters.downPayment) {
+      const downPayment = parseFloat(filters.downPayment);
+      if (!client.down_payment_value || client.down_payment_value < downPayment) return false;
+    }
+
+    return true;
   });
 
   // Abrir modal para novo cliente
@@ -318,6 +398,13 @@ export default function Clients() {
           </Button>
         </div>
       </div>
+
+      {/* Filtros Avançados */}
+      <ClientFilters
+        filters={filters}
+        onFilterChange={handleFilterChange}
+        onClearFilters={handleClearFilters}
+      />
 
       {/* Lista de Clientes - CARDS SIMPLIFICADOS */}
       <div className="space-y-2">

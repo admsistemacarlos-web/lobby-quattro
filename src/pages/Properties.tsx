@@ -23,6 +23,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { PropertyFilters } from "@/components/PropertyFilters";
 
 // Tipos
 interface Property {
@@ -132,6 +133,48 @@ export default function Properties() {
   const [corretorId, setCorretorId] = useState<string | null>(null);
   const [matches, setMatches] = useState<Client[]>([]);
 
+  const [filters, setFilters] = useState({
+    propertyType: "",
+    purpose: "",
+    neighborhood: "",
+    status: "",
+    minBedrooms: "",
+    maxBedrooms: "",
+    minBathrooms: "",
+    maxBathrooms: "",
+    minParkingSpots: "",
+    maxParkingSpots: "",
+    minPrice: "",
+    maxPrice: "",
+    minArea: "",
+    maxArea: "",
+  });
+
+  // Função para atualizar filtros
+  function handleFilterChange(key: string, value: string) {
+    setFilters(prev => ({ ...prev, [key]: value }));
+  }
+
+  // Função para limpar todos os filtros
+  function handleClearFilters() {
+    setFilters({
+      propertyType: "",
+      purpose: "",
+      neighborhood: "",
+      status: "",
+      minBedrooms: "",
+      maxBedrooms: "",
+      minBathrooms: "",
+      maxBathrooms: "",
+      minParkingSpots: "",
+      maxParkingSpots: "",
+      minPrice: "",
+      maxPrice: "",
+      minArea: "",
+      maxArea: "",
+    });
+  }
+
   // Buscar corretor_id do usuário logado
   useEffect(() => {
     async function getCorretorId() {
@@ -207,15 +250,88 @@ export default function Properties() {
     }
   }
 
-  // Filtrar imóveis pela busca
+  // Filtrar imóveis pela busca E pelos filtros avançados
   const filteredProperties = properties.filter((prop) => {
+    // Filtro de busca por texto
     const term = searchTerm.toLowerCase();
-    return (
+    const matchesSearch = 
       prop.title.toLowerCase().includes(term) ||
       prop.neighborhood?.toLowerCase().includes(term) ||
       prop.city?.toLowerCase().includes(term) ||
-      prop.address?.toLowerCase().includes(term)
-    );
+      prop.address?.toLowerCase().includes(term);
+
+    if (!matchesSearch) return false;
+
+    // Filtros avançados
+    if (filters.propertyType && filters.propertyType !== "all") {
+      if (prop.property_type !== filters.propertyType) return false;
+    }
+
+    if (filters.purpose && filters.purpose !== "all") {
+      if (prop.purpose !== filters.purpose) return false;
+    }
+
+    if (filters.neighborhood) {
+      const searchNeighborhood = filters.neighborhood.toLowerCase();
+      const propNeighborhood = (prop.neighborhood || prop.location || "").toLowerCase();
+      if (!propNeighborhood.includes(searchNeighborhood)) return false;
+    }
+
+    if (filters.status && filters.status !== "all") {
+      if (prop.status !== filters.status) return false;
+    }
+
+    if (filters.minBedrooms) {
+      const minBed = parseInt(filters.minBedrooms);
+      if (!prop.bedrooms || prop.bedrooms < minBed) return false;
+    }
+
+    if (filters.maxBedrooms) {
+      const maxBed = parseInt(filters.maxBedrooms);
+      if (!prop.bedrooms || prop.bedrooms > maxBed) return false;
+    }
+
+    if (filters.minBathrooms) {
+      const minBath = parseInt(filters.minBathrooms);
+      if (!prop.bathrooms || prop.bathrooms < minBath) return false;
+    }
+
+    if (filters.maxBathrooms) {
+      const maxBath = parseInt(filters.maxBathrooms);
+      if (!prop.bathrooms || prop.bathrooms > maxBath) return false;
+    }
+
+    if (filters.minParkingSpots) {
+      const minParking = parseInt(filters.minParkingSpots);
+      if (!prop.parking_spots || prop.parking_spots < minParking) return false;
+    }
+
+    if (filters.maxParkingSpots) {
+      const maxParking = parseInt(filters.maxParkingSpots);
+      if (!prop.parking_spots || prop.parking_spots > maxParking) return false;
+    }
+
+    if (filters.minPrice) {
+      const minPrice = parseFloat(filters.minPrice);
+      if (!prop.price || prop.price < minPrice) return false;
+    }
+
+    if (filters.maxPrice) {
+      const maxPrice = parseFloat(filters.maxPrice);
+      if (!prop.price || prop.price > maxPrice) return false;
+    }
+
+    if (filters.minArea) {
+      const minArea = parseFloat(filters.minArea);
+      if (!prop.total_area || prop.total_area < minArea) return false;
+    }
+
+    if (filters.maxArea) {
+      const maxArea = parseFloat(filters.maxArea);
+      if (!prop.total_area || prop.total_area > maxArea) return false;
+    }
+
+    return true;
   });
 
   // Abrir modal para novo imóvel
@@ -331,6 +447,13 @@ export default function Properties() {
           </Button>
         </div>
       </div>
+
+      {/* Filtros Avançados */}
+      <PropertyFilters
+        filters={filters}
+        onFilterChange={handleFilterChange}
+        onClearFilters={handleClearFilters}
+      />
 
       {/* Lista de Imóveis - CARDS SIMPLIFICADOS */}
       <div className="space-y-2">
